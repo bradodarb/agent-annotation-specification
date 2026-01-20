@@ -16,14 +16,14 @@ The inline syntax is a single-line annotation that can be placed before any code
 
 **Format:**
 ```text
-@!<annotation-key> [<annotation-value>] { <properties> }
+@!<annotation-key> [<annotation-value>] (<properties>)
 ```
 
 **Examples:**
 ```python
 # At the file level
-# @!readonly true { "author": "alice" }
-# @!link "https://example.com/api" { "tags": ["backend"] }
+# @!readonly true (author:alice)
+# @!link "https://example.com/api" (tags[1]:backend)
 
 # Before a function
 # @!deprecated "Use process_data_v2 instead"
@@ -31,14 +31,20 @@ def process_data(data):
     return data
 
 # Before a class
-# @!experimental { "author": "bob", "since": "2024-01-15" }
+# @!experimental (author:bob since:2024-01-15)
 class DataProcessor:
     pass
 
 # Before a method
-# @!method my_method { "author": "alice", "since": "2023-04-01" }
+# @!method my_method (author:alice since:2023-04-01)
 def my_method():
     pass
+
+# Marking a canonical implementation
+# @!canon "error-handling-pattern" (version:1.0 domain:backend)
+def handle_api_error(error):
+    """This is the reference implementation for API error handling."""
+    return {"status": "error", "message": str(error)}
 ```
 
 **Scope:** The annotation applies to the declaration that immediately follows it. Multiple annotations can be stacked above a single declaration. No explicit end marker is needed since the annotation is tied to a single element.
@@ -55,14 +61,14 @@ The block-level syntax is more verbose but provides tighter control for defining
 
 **Format:**
 ```text
-@!begin <key> [<value>] { <props> }
+@!begin <key> [<value>] (<props>)
 … code or text …
 @!end <key>
 ```
 
 **Examples:**
 ```python
-# @!begin experimental { "author": "bob" }
+# @!begin experimental (author:bob)
 # This entire section is experimental and may change.
 def new_feature():
     pass
@@ -71,16 +77,28 @@ def another_experimental_function():
     pass
 # @!end experimental
 
-# @!begin refactor { "priority": "high", "assigned": "team-alpha" }
+# @!begin refactor (priority:high assigned:team-alpha)
 # Legacy code that needs refactoring
 legacy_function_1()
 legacy_function_2()
 # @!end refactor
 
-# @!begin readonly { "author": "bob" }
+# @!begin readonly (author:bob)
 def internal_function():
     pass
 # @!end readonly
+
+# @!begin canon "database-layer-pattern" (version:2.0 scope:architecture)
+# This is the canonical pattern for database access in this project.
+# All new database code should follow this pattern.
+class DatabaseConnection:
+    def __init__(self, config):
+        self.config = config
+
+    def execute(self, query):
+        # Implementation details...
+        pass
+# @!end canon
 ```
 
 **Scope:** The annotation applies to the entire region between the `@!begin` and `@!end` markers. The key in the `@!end` marker must match the key in the `@!begin` marker.
@@ -106,11 +124,12 @@ Both styles support the same metadata structure (key-value pairs and JSON object
 | Key | Value | Description | Example |
 |-----|-------|-------------|---------|
 | `readonly` | `true/false` | Marks a block or file as immutable | `// @!readonly true` |
+| `canon` | String | Marks authoritative/reference implementations, architecture patterns, or standards | `// @!canon "authentication-pattern"` |
 | `link` | URL | Points to external resources (docs, issue, code review) | `# @!link "https://github.com/...#L42"` |
 | `todo` | String | Human‑readable task description | `// @!todo "Add unit tests"` |
 | `license` | SPDX identifier | Declares licensing for the block | `/* @!license MIT */` |
 | `agent` | Name | Indicates which automated agent should process the block | `# @!agent "linter"` |
-| `metadata` | JSON | Arbitrary key/value pairs for custom tooling | `// @!metadata { "priority": "high" }` |
+| `metadata` | Toon | Arbitrary key/value pairs for custom tooling | `// @!metadata (priority:high)` |
 
 ---
 
@@ -125,13 +144,13 @@ Tags are lightweight, reusable descriptors that can be attached to any annotatio
 Tags are expressed as a comma‑separated list inside the annotation value or within the JSON properties block:
 
 ```text
-@!link "https://example.com" { "tags": ["docs", "frontend"] }
+@!link "https://example.com" (tags[2]:docs,frontend)
 ```
 
 or
 
 ```text
-# @!todo "Fix edge case" tags=["bug", "critical"]
+# @!todo "Fix edge case" tags[2]:bug,critical
 ```
 
 When using the comma‑separated form, the parser should interpret it as an array of strings.
@@ -142,7 +161,7 @@ When using the comma‑separated form, the parser should interpret it as an arra
 |-----|-------------|---------|
 | `bug` | Indicates a defect | `# @!todo "Resolve crash" tags=["bug"]` |
 | `feature` | Marks a new capability | `# @!todo "Add export" tags=["feature"]` |
-| `frontend` / `backend` | Scope of the change | `# @!link "..." { "tags": ["frontend"] }` |
+| `frontend` / `backend` | Scope of the change | `# @!link "..." (tags[1]:frontend)` |
 | `critical` | High priority | `# @!todo "Security fix" tags=["critical"]` |
 | `deprecated` | Obsolete code | `# @!deprecated "Use new API" tags=["deprecated"]` |
 
@@ -172,6 +191,8 @@ When using the comma‑separated form, the parser should interpret it as an arra
 | Scenario | Annotation | Benefit |
 |----------|------------|---------|
 | **Read‑only sections** | `@!readonly true` | Prevent accidental edits; CI can flag modifications. |
+| **Canonical patterns** | `@!canon "auth-pattern" (version:1.0)` | Marks reference implementations that should be followed across the codebase. |
+| **Architecture standards** | `@!canon "api-design" (scope:rest-endpoints)` | Establishes architectural patterns for consistency. |
 | **Editing instructions** | `@!link "https://docs.example.com/editing#section-42"` | Direct developers to the right guidelines. |
 | **Automated linting** | `@!agent "linter"` | Linter can skip or apply special rules. |
 | **License attribution** | `@!license GPL-3.0` | Makes licensing explicit for each file/section. |
@@ -189,7 +210,82 @@ When using the comma‑separated form, the parser should interpret it as an arra
 
 ### 5.4 CI/CD Pipelines
 
-* Skip tests for a branch: `# @!agent "ci" { "skip_tests": true }`
+* Skip tests for a branch: `# @!agent "ci" (skip_tests:true)`
+
+### 5.5 Canon Annotations for Standards and Patterns
+
+Canon annotations establish authoritative implementations and architectural patterns that should be followed throughout a codebase. They're particularly valuable for:
+
+**Reference Implementations:**
+```python
+# @!canon "authentication-flow" (version:2.0 domain:security)
+def authenticate_user(username, password):
+    """This is the canonical authentication implementation.
+    All auth flows should follow this pattern."""
+    # Validate credentials
+    # Generate session token
+    # Return authentication result
+    pass
+```
+
+**Architecture Patterns:**
+```typescript
+// @!canon "component-structure" (scope:frontend type:react)
+// This is the standard component structure for all React components
+export const CanonicalComponent: React.FC<Props> = ({ data }) => {
+  // 1. Hooks
+  const [state, setState] = useState();
+
+  // 2. Effects
+  useEffect(() => {}, []);
+
+  // 3. Event handlers
+  const handleEvent = () => {};
+
+  // 4. Render
+  return <div>{data}</div>;
+};
+```
+
+**API Design Standards:**
+```python
+# @!begin canon "rest-api-pattern" (version:1.0 applies-to:all-endpoints)
+# Standard REST API response format
+@app.route('/api/resource')
+def get_resource():
+    return {
+        "status": "success",
+        "data": resource_data,
+        "meta": {
+            "timestamp": datetime.now(),
+            "version": "1.0"
+        }
+    }
+# @!end canon
+```
+
+**Database Access Patterns:**
+```java
+// @!canon "repository-pattern" (layer:data-access framework:spring)
+@Repository
+public class CanonicalRepository {
+    // This is the standard repository pattern
+    // All data access should follow this structure
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    public Optional<Entity> findById(Long id) {
+        // Standard query pattern
+    }
+}
+```
+
+**Tooling Integration:**
+- **AI Code Assistants** can learn from canon annotations to suggest code that follows project patterns
+- **Linters** can enforce that new code matches canonical patterns
+- **Documentation generators** can extract canon blocks as examples
+- **Code review tools** can flag deviations from canonical implementations
 
 ---
 
@@ -199,7 +295,7 @@ Annotations work within the comment syntax of any programming language:
 
 | Language | Comment Syntax | Example |
 |----------|----------------|---------|
-| C/C++/Java | `//` or `/* … */` | `// @!readonly { "author": "alice" }` |
+| C/C++/Java | `//` or `/* … */` | `// @!readonly (author:alice)` |
 | Python | `#` | `# @!link "https://docs.example.com/editing#section-42"` |
 | Markdown | `<!-- … -->` | `<!-- @!todo "Refactor this block" -->` |
 
@@ -214,7 +310,7 @@ Annotations work within the comment syntax of any programming language:
 | **Documentation Generators** | Include or exclude annotated sections | `@!hidden` |
 | **AI Assistants** | Generate explanations, code completions | `@!agent "ai"` |
 | **Version‑Control Hooks** | Enforce read‑only blocks | `@!readonly` |
-| **Custom Parsers** | Domain‑specific processing | `@!metadata { … }` |
+| **Custom Parsers** | Domain‑specific processing | `@!metadata (…)` |
 
 ### 7.1 Sample Parser (Python)
 
@@ -225,8 +321,8 @@ from pathlib import Path
 ANNOTATION_RE = re.compile(r'''
     ^\s*#\s*@!                    # start marker (example for Python)
     (?P<key>\w+)\s*                # annotation key
-    (?P<value>[^{}\s]+)?\s*        # optional value
-    (\{(?P<props>[^}]+)\})?        # optional JSON props
+    (?P<value>[^()\s]+)?\s*        # optional value
+    (\((?P<props>[^)]+)\))?        # optional Toon props
 ''', re.VERBOSE)
 
 def parse_annotations(file_path: Path):
@@ -281,19 +377,40 @@ Below is a minimal Python project demonstrating the use of annotations.
 
 ```
 # project/README.md
-# @!link "https://github.com/example/project" { "tags": ["docs", "repo"] }
+# @!link "https://github.com/example/project" (tags[2]:docs,repo)
 
 # project/main.py
-# @!readonly true { "author": "alice" }
-# @!link "https://example.com/api" { "tags": ["backend"] }
+# @!readonly true (author:alice)
+# @!link "https://example.com/api" (tags[1]:backend)
 
+# @!canon "data-processing-pattern" (version:1.0 scope:backend)
 def process_data(data):
-    # @!todo "Handle edge cases" tags=["bug", "critical"]
+    """This is the canonical data processing implementation.
+    All data processing functions should follow this pattern."""
+    # @!todo "Handle edge cases" tags[2]:bug,critical
     return data
 
-# @!begin experimental { "author": "bob" }
+# @!begin experimental (author:bob)
 # This block is experimental and may change.
 # @!end experimental
+
+# project/db/connection.py
+# @!begin canon "database-connection" (version:2.0 layer:persistence)
+# This is the standard way to create database connections in this project.
+# All database code should use this pattern for consistency and maintainability.
+class DatabaseConnection:
+    def __init__(self, config):
+        self.config = config
+        self.connection = None
+
+    def connect(self):
+        # Standard connection logic
+        pass
+
+    def execute(self, query, params=None):
+        # Standard query execution
+        pass
+# @!end canon
 ```
 
 The accompanying parser can extract all annotations and feed them to a CI job or an LLM prompt.
@@ -306,12 +423,12 @@ For detailed explanation of annotation syntax, see **Section 2**.
 
 **Inline Syntax:**
 ```text
-@!<annotation-key> [<annotation-value>] { <properties> }
+@!<annotation-key> [<annotation-value>] (<properties>)
 ```
 
 **Block-Level Syntax:**
 ```text
-@!begin <key> [<value>] { <props> }
+@!begin <key> [<value>] (<props>)
 … code or text …
 @!end <key>
 ```
@@ -321,13 +438,15 @@ For detailed explanation of annotation syntax, see **Section 2**.
 | `@!` | Marker that introduces an annotation | `@!readonly true` |
 | `<annotation-key>` | Identifier (snake_case, kebab-case, camelCase) | `readonly`, `link`, `todo` |
 | `<annotation-value>` | Optional scalar or structured value (string, number, array) | `true`, `"https://example.com"` |
-| `{ <properties> }` | Optional JSON‑like block with additional metadata (e.g., `author`, `date`) | `{ "author": "alice", "since": "2023-05-01" }` |
+| `(<properties>)` | Optional Toon-formatted properties with additional metadata (e.g., `author`, `date`) | `(author:alice since:2023-05-01)` |
 
-### JSON‑Object Rules
+### Toon Property Format Rules
 
-* Keys must be double‑quoted strings.
-* Values can be strings, numbers, booleans, null, arrays, or nested objects.
-* No comments are allowed inside the JSON block.
+* Properties use Toon format syntax: `key:value` pairs separated by spaces
+* Arrays use the format `key[N]:v1,v2,...` where N is the array length
+* String values that are simple (no special characters) don't require quotes
+* Values can be strings, numbers, booleans, null, or arrays
+* Multiple properties are space-separated within parentheses
 
 ---
 
@@ -336,6 +455,7 @@ For detailed explanation of annotation syntax, see **Section 2**.
 | Term | Definition |
 |------|------------|
 | **Annotation** | A metadata marker prefixed with `@!` that attaches information to code or text. |
+| **Canon** | An authoritative reference implementation, architecture pattern, or standard that should be followed across a codebase. |
 | **Tag** | A lightweight label used to group or filter annotations, typically for LLMs or tooling. |
 | **Agent** | An automated process (e.g., linter, CI, AI assistant) that consumes annotations to modify behavior. |
 | **Inline Syntax** | A single-line annotation that can be placed before any code element (functions, methods, classes, variables, or at the top of files). |
@@ -350,16 +470,18 @@ For detailed explanation of annotation syntax, see **Section 2**.
 | **Can I use `@!` inside string literals?** | Yes, but the parser should ignore annotations that are not at the start of a line or are inside quotes. Use a language‑specific tokenizer if you need stricter rules. |
 | **What if my language uses `@` for decorators?** | The `@!` prefix is distinct from a single `@`. If your language already has `@` for decorators, you can still use `@!` as it will be parsed as a comment or string literal. |
 | **Do I need to commit the annotations to source control?** | Absolutely. Annotations are part of the code/documentation and should be versioned. |
-| **Can I nest annotations?** | Nesting is not formally supported. If you need hierarchical metadata, use the `metadata` key to embed a JSON object. |
+| **Can I nest annotations?** | Nesting is not formally supported. If you need hierarchical metadata, use the `metadata` key to embed nested properties. |
+| **How do canon annotations help with AI assistants?** | Canon annotations mark reference implementations that AI assistants can learn from. When generating new code, AI tools can reference canon blocks to match your project's patterns and standards. |
+| **Should every function be marked as canon?** | No. Only mark functions/patterns that represent the authoritative way of doing something in your codebase. Canon annotations should be reserved for patterns you want others to follow. |
 
 ---
 
 ## Appendix D: References
 
+* [TOON Format Specification](https://github.com/toon-format/spec)
 * [JSON Schema](https://json-schema.org/)
 * [PEP 484 – Type Hints](https://www.python.org/dev/peps/pep-0484/)
 * [GitHub Actions](https://docs.github.com/en/actions)
-* [OpenAI API](https://platform.openai.com/docs)
 
 ---
 
